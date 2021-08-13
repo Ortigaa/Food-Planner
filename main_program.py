@@ -542,41 +542,33 @@ class MainWindow(QtWidgets.QMainWindow, recetario_ui.Ui_MainWindow):
         self.btnSearchRecipe.clicked.connect(self.search_recipe)
         
     #   TODO
-    #    Attempt to create a context menu in the table widget
-    #   to display after right click on the cell
-    #
-    #self.tableWeek.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-   
-    #     self.tableWeek.customContextMenuRequested.connect(self.generateMenu)
-    #     self.tableWeek.viewport().installEventFilter(self)
-        
-    #     # def contextMenuEvent(self, event):
-    #     #     cmenu = QMenu(self)
-    
-    #     #     newAct = cmenu.addAction("New")
-    #     #     openAct = cmenu.addAction("Open")
-    #     #     quitAct = cmenu.addAction("Quit")
-    #     #     action = cmenu.exec_(self.mapToGlobal(event))
-    
-    #     #     if action == quitAct:
-    #     #         app.quit()
-        
-    # def eventFilter(self, source, event):
-    #     if(event.type() == QtCore.QEvent.MouseButtonPress and 
-    #        event.buttons() == QtCore.Qt.RightButton and
-    #        source is self.tableWeek.viewport()):
-    #         item = self.tableWeek.itemAt(event.pos())
-    #         print('Global Pos:', event.globalPos())
-    #         if item is not None:
-    #             print('Table Item:', item.row(), item.column())
-    #             self.menu = QMenu(self)
-    #             self.menu.addAction(item.text())         #(QAction('test'))
-    #             #menu.exec_(event.globalPos())
-    #     return super(MainWindow, self).eventFilter(source, event)
-    
-    # def generateMenu(self, pos):
-    #     print("pos======",pos)
-    #     self.menu.exec_(self.tableWidget.mapToGlobal(pos))
+#    Attempt to create a context menu in the table widget
+#   to display after right click on the cell
+
+       self.tableWeek.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+
+       self.tableWeek.customContextMenuRequested.connect(self.generateMenu)
+       self.tableWeek.viewport().installEventFilter(self)
+
+   def eventFilter(self, source, event):
+       if(event.type() == QtCore.QEvent.MouseButtonPress and
+          event.buttons() == QtCore.Qt.RightButton and
+          source is self.tableWeek.viewport()):
+           item = self.tableWeek.itemAt(event.pos())
+           print('Global Pos:', event.globalPos())
+           if item is not None:
+               print('Table Item:', item.row(), item.column())
+               self.menu = QMenu(self)
+               self.menu.addAction("New")
+               self.menu.addAction("Open")
+               self.menu.addAction("Quit")
+               #(QAction('test'))
+               #menu.exec_(event.globalPos())
+       return super(MainWindow, self).eventFilter(source, event)
+
+   def generateMenu(self, pos):
+       print("pos======",pos)
+       self.menu.exec_(self.tableWeek.mapToGlobal(pos))
     
     def activate_repetition(self):
         """
