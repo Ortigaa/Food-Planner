@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jun 08 11:51 2026
+Created on Mon Jun 15 12:39 2026
 
 @author: rodri
 
@@ -17,11 +17,7 @@ TODO
 # =============================================================================
 try:
     import os
-    import random
-    from datetime import datetime
-    import streamlit as st
     import sqlite3
-    import db_backend as db
 
 except ModuleNotFoundError as imp_error:
     print("Import Error: {0}".format(imp_error))
@@ -29,5 +25,22 @@ except ModuleNotFoundError as imp_error:
 # =============================================================================
 # Your code starts here
 # =============================================================================
-st.logo(r"C:\Users\rodrigo.delgado\Documentos\Food-Planner\Web_app_v2.0.0\app_icon.png", size="medium", link=None, icon_image=None)
-st.title("Planificador Menus semanales")
+# Assign a name to the database
+DB_NAME = "recetas.db"
+
+# Connect to the database
+def connect():
+    return sqlite3.connect(DB_NAME)
+
+# Create a table (recipes) with columns [id, name, ingredients, steps, tags]
+SQL_CREAR_RECETAS = "CREATE TABLE IF NOT EXISTS recipes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, ingredients TEXT, steps TEXT, tags TEXT)"
+
+def start_db():
+    conn = connect()
+    conn.execute(SQL_CREAR_RECETAS)
+    conn.commit()
+    conn.close()
+
+if __name__ == "__main__":
+    start_db()
+print("Base de datos inicializada")
