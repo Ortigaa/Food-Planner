@@ -29,6 +29,9 @@ except ModuleNotFoundError as imp_error:
 # =============================================================================
 # Your code starts here
 # =============================================================================
+
+db.init_db()
+
 ### Page configuration
 st.logo("app_icon.png", size="medium", link=None, icon_image=None)
 
@@ -51,8 +54,7 @@ PAGES = [
 
 DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
-### Mockup values for debug
-TAGS = ["caliente", "rápida", "ensalada", "fría", "pasta"]
+TAGS = db.get_all_tags()
 
 ### Session state definition
 if "ingredient_rows" not in st.session_state:
@@ -194,6 +196,8 @@ def render_create_recipe():
         st.write("**Tags:**", tags)
         st.write("**Ingredientes:**")
         st.json(ingredients)
+        db.add_recipe(recipe_name, num_people, ingredients, steps, tags)
+        st.success("Receta guardada correctamente.")
 
 # View list of recipies already created
 def render_view_recipes():
@@ -201,6 +205,51 @@ def render_view_recipes():
     search_name = st.text_input("Buscar por nombre")
     selected_tags = st.multiselect("Filtrar por tags",options=TAGS)
     search_ingredient = st.text_input("Buscar por ingrediente")
+
+    recipes = db.search_recipes_by_name(search_name)
+
+    visible_recipes = []
+
+    for recipe in recipes:
+        recipe_tags = db.get_tags_by_recipe(recipe["id"])
+        recipe_ingredients = db.get_ingredients_by_recipe(recipe["id"])
+
+        matches_tags = all(tag in recipe_tags for tag in selected_tags) if selected_tags else True
+
+        if search_ingredient:
+            ingredient_text = search_ingredient.strip().lower()
+            matches_ingredient = any(
+                ingredient_text in ingredient["ingredient_name"].lower()
+                for ingredient in recipe_ingredients
+            )
+        else:
+            matches_ingredient = True
+
+        if matches_tags and matches_ingredient:
+            visible_recipes.append((recipe, recipe_tags, recipe_ingredients))
+
+    if not visible_recipes:
+        st.info("No se han encontrado recetas.")
+        return
+
+    for recipe, recipe_tags, recipe_ingredients in visible_recipes:
+        element = st.expander(f"{recipe['name']}")
+        element.write(f"Raciones base: {recipe['num_people']}")
+        element.write(f"Tags: {', '.join(recipe_tags) if recipe_tags else 'Sin tags'}")
+
+        element.write("**Ingredientes:**")
+        for ingredient in recipe_ingredients:
+            qty = ingredient["quantity"]
+            unit = ingredient["unit"] or ""
+
+            if qty is None:
+                element.write(f"- {ingredient['ingredient_name']}")
+            else:
+                element.write(f"- {ingredient['ingredient_name']}: {qty} {unit}")
+
+        element.write("**Pasos:**")
+        element.write(recipe["steps"])
+        element.divider()
 
 # Page to create a weekly menu
 def render_create_menu():
@@ -248,7 +297,7 @@ def render_create_menu():
     with select_col1:
         num_people = st.number_input("Numero de comensales", min_value=1, value=4, step=1, label_visibility="collapsed")
     with select_col2:
-        global_num_people = st.checkbox("Global", value=True)
+        check_num_people = st.checkbox("Global", value=True)
 
     header = st.columns([1, 2, 2])
     with header[0]:
