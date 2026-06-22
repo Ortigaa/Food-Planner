@@ -34,9 +34,10 @@ st.logo("app_icon.png", size="medium", link=None, icon_image=None)
 
 st.set_page_config(
     page_title="Planificador Menus semanales",
-    page_icon="🍽️",
+    page_icon="app_icon.png",
     layout="wide",
 )
+
 ### List of pages for the sidebar
 # At some point maybe is better to change it to actual pages (different scripts for each page)
 PAGES = [
@@ -107,12 +108,12 @@ def render_create_recipe():
     with row0:
         st.write("**Ingredientes**")
     with controls_col1:
-        if st.button("Añadir fila", use_container_width=True):
+        if st.button("Añadir fila", width="stretch"):
             st.session_state.ingredient_rows += 1
             st.rerun()
 
     with controls_col2:
-        if st.button("Quitar fila", use_container_width=True, disabled=st.session_state.ingredient_rows <= 1,):
+        if st.button("Quitar fila", width="stretch", disabled=st.session_state.ingredient_rows <= 1,):
             st.session_state.ingredient_rows -= 1
             st.rerun()
 
@@ -120,10 +121,11 @@ def render_create_recipe():
     with st.form("create_recipe_form"):
         st.subheader("Nombre")
         recipe_name = st.text_input("nombre de la receta", placeholder = "Nombre de la receta", label_visibility = "collapsed")
+        
+        # Add number of people so values of ingredients can be normalized
+        num_people = st.number_input("Numero de personas", min_value=1, step=1, value=4, width = 150)
 
         st.subheader("Ingredientes")
-        # Add number of people so values of ingredients can be normalized
-        num_people = st.number_input("Numero de personas", min_value=1, step=1, width = 150)
         header_cols = st.columns([0.8, 0.1, 0.1])
         header_cols[0].markdown("**Ingrediente**")
         header_cols[1].markdown("**Cantidad**")
@@ -197,8 +199,82 @@ def render_view_recipes():
 # Page to create a weekly menu
 def render_create_menu():
     st.title("Crear Menú semanal")
-    st.text("Aqui ira el widget para crear el menu semanal")
 
+    DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+    # Mock temporal para probar la interfaz
+    recipe_options = [
+        "",
+        "Tortilla de patatas",
+        "Ensalada de tomate",
+        "Pasta con atún",
+        "Lentejas",
+        "Pollo al horno",
+    ]
+
+    tags = ["caliente", "frio", "ensalada"]
+
+
+    st.subheader("Plan semanal")
+
+    # Buttons for menu actions
+    controls_col1, controls_col2, _ = st.columns([1, 1, 4])
+
+    with controls_col1:
+        st.button("Autorrellenar", width="stretch")
+
+    with controls_col2:
+        st.button("Limpiar", width="stretch")
+
+    selected_tags = st.multiselect("Tags", tags)
+
+    # Number of people selection
+    st.write("Numero de comensales")
+    select_col1, select_col2, _ = st.columns([1, 1, 4])
+    with select_col1:
+        num_people = st.number_input("Numero de comensales", min_value=1, value=4, step=1, label_visibility="collapsed")
+    with select_col2:
+        global_num_people = st.checkbox("Global", value=True)
+
+    header1, header2, header3 = st.columns([1, 2, 2])
+    with header1:
+        st.markdown("**Día**")
+    with header2:
+        st.markdown("**Comida**")
+    with header3:
+        st.markdown("**Cena**")
+
+    for i, day in enumerate(DAYS):
+        col1, col2, col3 = st.columns([1, 2, 2])
+
+        with col1:
+            st.write(day)
+
+        with col2:
+            st.selectbox(
+                "Comida",
+                recipe_options,
+                key=f"menu_lunch_{i}",
+                label_visibility="collapsed",
+            )
+
+        with col3:
+            st.selectbox(
+                "Cena",
+                recipe_options,
+                key=f"menu_dinner_{i}",
+                label_visibility="collapsed",
+            )
+
+        st.divider()
+
+    # Buttons for the last actions
+    end_col1, end_col2, _ = st.columns([1,1,4])
+    with end_col1:
+        st.button("Crear lista", width="stretch", type="primary")
+    with end_col2:
+        st.button("Guardar", width="stretch")
+        
 
 selected_page = render_sidebar()
 
