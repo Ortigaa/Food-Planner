@@ -43,6 +43,7 @@ PAGES = [
     "Inicio",
     "Crear receta",
     "Ver recetas",
+    "Crear Menú semanal"
 ]
 
 ### Session state definition
@@ -93,8 +94,11 @@ def render_home():
 
 # Recipe creation page
 def render_create_recipe():
+    """
+    
+    """
 
-    UNITS = ["", "ud", "g", "kg", "ml", "l", "lata"]
+    UNITS = ["", "ud", "g", "kg", "ml", "l", "lata", "bote"]
 
     st.title("Crear receta")
 
@@ -112,13 +116,14 @@ def render_create_recipe():
             st.session_state.ingredient_rows -= 1
             st.rerun()
 
+    # Start of form widget
     with st.form("create_recipe_form"):
         st.subheader("Nombre")
-        st.text_input("nombre de la receta", placeholder = "Nombre de la receta", label_visibility = "collapsed")
+        recipe_name = st.text_input("nombre de la receta", placeholder = "Nombre de la receta", label_visibility = "collapsed")
 
         st.subheader("Ingredientes")
-
-        st.number_input("Numero de personas", min_value=1, step=1, width = 150)
+        # Add number of people so values of ingredients can be normalized
+        num_people = st.number_input("Numero de personas", min_value=1, step=1, width = 150)
         header_cols = st.columns([0.8, 0.1, 0.1])
         header_cols[0].markdown("**Ingrediente**")
         header_cols[1].markdown("**Cantidad**")
@@ -128,7 +133,7 @@ def render_create_recipe():
             col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
 
             with col1:
-                st.text_input("Ingrediente",key=f"ingredient_name_{i}",label_visibility="collapsed",placeholder="Tomate")
+                st.text_input("Ingrediente",key=f"ingredient_name_{i}",label_visibility="collapsed",placeholder="Ingrediente")
             with col2:
                 st.number_input("Cantidad",min_value=0.0,step=0.5,key=f"ingredient_qty_{i}",label_visibility="collapsed")
             with col3:
@@ -136,14 +141,48 @@ def render_create_recipe():
             
 
         st.subheader("Preparación")
-        st.text_area("Pasos", placeholder = "Pasos", label_visibility = "collapsed", height=180)
+        steps = st.text_area("Pasos", placeholder = "Pasos", label_visibility = "collapsed", height=180)
 
         st.subheader("Clasificación")
-        st.text_input("Tags separados por comas", placeholder = "Tags separados por comas", label_visibility = "collapsed")
+        tags_text = st.text_input("Tags separados por comas", placeholder = "Tags separados por comas", label_visibility = "collapsed")
         submitted = st.form_submit_button("Guardar receta")
 
     if submitted:
-        st.warning("Todavía no está conectada a la base de datos.")
+        # Create ingredients list
+        ingredients = []
+
+        for i in range(st.session_state.ingredient_rows):
+            raw_name = st.session_state.get(f"ingredient_name_{i}", "")
+            qty = st.session_state.get(f"ingredient_qty_{i}", 0.0)
+            unit = st.session_state.get(f"ingredient_unit_{i}", "")
+
+            clean_name = raw_name.strip().lower()
+            clean_unit = unit.strip().lower() if unit else None
+            clean_qty = None if qty == 0 else qty
+
+            if clean_name:
+                ingredients.append(
+                    {
+                        "name": clean_name,
+                        "quantity": clean_qty,
+                        "unit": clean_unit,
+                    }
+                )
+        # Convert the tags string into a list. Remove duplicates and normalize names
+        tags = []
+        for tag in tags_text.split(","):
+            clean_tag = tag.strip().lower()
+            if clean_tag and clean_tag not in tags:
+                tags.append(clean_tag)
+
+        #DEBUG for now, only to show the data
+        st.success("Formulario enviado. Estos son los datos recogidos:")
+        st.write("**Nombre:**", recipe_name)
+        st.write("**Número de personas:**", num_people)
+        st.write("**Pasos:**", steps)
+        st.write("**Tags:**", tags)
+        st.write("**Ingredientes:**")
+        st.json(ingredients)
 
 # View list of recipies already created
 def render_view_recipes():
@@ -155,6 +194,10 @@ def render_view_recipes():
     )
     search_ingredient = st.text_input("Buscar por ingrediente")
 
+# Page to create a weekly menu
+def render_create_menu():
+    st.title("Crear Menú semanal")
+    st.text("Aqui ira el widget para crear el menu semanal")
 
 
 selected_page = render_sidebar()
@@ -165,3 +208,5 @@ elif selected_page == "Crear receta":
     render_create_recipe()
 elif selected_page == "Ver recetas":
     render_view_recipes()
+elif selected_page == "Crear Menú semanal":
+    render_create_menu()
