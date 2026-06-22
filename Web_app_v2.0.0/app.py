@@ -47,10 +47,21 @@ PAGES = [
     "Crear Menú semanal"
 ]
 
+# Global variables for use across pages
+
+DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+### Mockup values for debug
+TAGS = ["caliente", "rápida", "ensalada", "fría", "pasta"]
+
 ### Session state definition
 if "ingredient_rows" not in st.session_state:
     st.session_state.ingredient_rows = 3
-
+for i in range(len(DAYS)):
+    if f"menu_lunch_{i}" not in st.session_state:
+        st.session_state[f"menu_lunch_{i}"] = ""
+    if f"menu_dinner_{i}" not in st.session_state:
+        st.session_state[f"menu_dinner_{i}"] = ""
 
 ### Creation of sidebar
 def render_sidebar():
@@ -69,16 +80,14 @@ def render_home():
     """
     st.title("Planificador familiar de recetas")
 
-    DAYS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo",]
-
     st.subheader("Semana actual")
 
-    header1, header2, header3 = st.columns([1, 2, 2])
-    with header1:
+    header = st.columns([1, 2, 2])
+    with header[0]:
         st.markdown("**Día**")
-    with header2:
+    with header[1]:
         st.markdown("**Comida**")
-    with header3:
+    with header[2]:
         st.markdown("**Cena**")
 
     for day in DAYS:
@@ -104,15 +113,15 @@ def render_create_recipe():
     st.title("Crear receta")
 
     # Control for the ingridients rows (add or remove)
-    row0, controls_col1, controls_col2, _ = st.columns([1, 1, 1, 3])
-    with row0:
+    ing_rows_control = st.columns([1, 1, 1, 3])
+    with ing_rows_control[0]:
         st.write("**Ingredientes**")
-    with controls_col1:
+    with ing_rows_control[1]:
         if st.button("Añadir fila", width="stretch"):
             st.session_state.ingredient_rows += 1
             st.rerun()
 
-    with controls_col2:
+    with ing_rows_control[2]:
         if st.button("Quitar fila", width="stretch", disabled=st.session_state.ingredient_rows <= 1,):
             st.session_state.ingredient_rows -= 1
             st.rerun()
@@ -132,13 +141,13 @@ def render_create_recipe():
         header_cols[2].markdown("**Unidad**")
 
         for i in range(st.session_state.ingredient_rows):
-            col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
+            ing_col = st.columns([0.8, 0.1, 0.1])
 
-            with col1:
+            with ing_col[0]:
                 st.text_input("Ingrediente",key=f"ingredient_name_{i}",label_visibility="collapsed",placeholder="Ingrediente")
-            with col2:
+            with ing_col[1]:
                 st.number_input("Cantidad",min_value=0.0,step=0.5,key=f"ingredient_qty_{i}",label_visibility="collapsed")
-            with col3:
+            with ing_col[2]:
                 st.selectbox("Unidad",UNITS,key=f"ingredient_unit_{i}",label_visibility="collapsed")
             
 
@@ -146,8 +155,8 @@ def render_create_recipe():
         steps = st.text_area("Pasos", placeholder = "Pasos", label_visibility = "collapsed", height=180)
 
         st.subheader("Clasificación")
-        tags_text = st.text_input("Tags separados por comas", placeholder = "Tags separados por comas", label_visibility = "collapsed")
-        submitted = st.form_submit_button("Guardar receta")
+        tags_list = st.multiselect("Tags",options= TAGS, placeholder = "Selecciona o añade tags", label_visibility = "collapsed", accept_new_options = True)
+        submitted = st.form_submit_button("Guardar receta", type="primary")
 
     if submitted:
         # Create ingredients list
@@ -172,7 +181,7 @@ def render_create_recipe():
                 )
         # Convert the tags string into a list. Remove duplicates and normalize names
         tags = []
-        for tag in tags_text.split(","):
+        for tag in tags_list:
             clean_tag = tag.strip().lower()
             if clean_tag and clean_tag not in tags:
                 tags.append(clean_tag)
@@ -190,17 +199,12 @@ def render_create_recipe():
 def render_view_recipes():
     st.title("Ver recetas")
     search_name = st.text_input("Buscar por nombre")
-    selected_tags = st.multiselect(
-        "Filtrar por tags",
-        options=["caliente", "rápida", "ensalada", "fría", "pasta"],
-    )
+    selected_tags = st.multiselect("Filtrar por tags",options=TAGS)
     search_ingredient = st.text_input("Buscar por ingrediente")
 
 # Page to create a weekly menu
 def render_create_menu():
     st.title("Crear Menú semanal")
-
-    DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
     # Mock temporal para probar la interfaz
     recipe_options = [
@@ -212,21 +216,31 @@ def render_create_menu():
         "Pollo al horno",
     ]
 
-    tags = ["caliente", "frio", "ensalada"]
-
-
     st.subheader("Plan semanal")
 
     # Buttons for menu actions
-    controls_col1, controls_col2, _ = st.columns([1, 1, 4])
+    control_cols = st.columns([1, 1, 4])
 
-    with controls_col1:
-        st.button("Autorrellenar", width="stretch")
+    with control_cols[0]:
+        button_autofill = st.button("Autorrellenar", width="stretch")
 
-    with controls_col2:
-        st.button("Limpiar", width="stretch")
+    with control_cols[1]:
+        button_clean = st.button("Limpiar", width="stretch")
 
-    selected_tags = st.multiselect("Tags", tags)
+    selected_tags = st.multiselect("Tags", TAGS)
+
+    # Functionality for the buttons
+    if button_autofill:
+        for i in range(len(DAYS)):
+            st.session_state[f"menu_lunch_{i}"] = random.choice(recipe_options[1:])
+            st.session_state[f"menu_dinner_{i}"] = random.choice(recipe_options[1:])
+        st.rerun()
+
+    if button_clean:
+        for i in range(len(DAYS)):
+            st.session_state[f"menu_lunch_{i}"] = ""
+            st.session_state[f"menu_dinner_{i}"] = ""
+        st.rerun()
 
     # Number of people selection
     st.write("Numero de comensales")
@@ -236,12 +250,12 @@ def render_create_menu():
     with select_col2:
         global_num_people = st.checkbox("Global", value=True)
 
-    header1, header2, header3 = st.columns([1, 2, 2])
-    with header1:
+    header = st.columns([1, 2, 2])
+    with header[0]:
         st.markdown("**Día**")
-    with header2:
+    with header[1]:
         st.markdown("**Comida**")
-    with header3:
+    with header[2]:
         st.markdown("**Cena**")
 
     for i, day in enumerate(DAYS):
@@ -251,29 +265,21 @@ def render_create_menu():
             st.write(day)
 
         with col2:
-            st.selectbox(
-                "Comida",
-                recipe_options,
-                key=f"menu_lunch_{i}",
-                label_visibility="collapsed",
-            )
+            st.selectbox("Comida", recipe_options, key=f"menu_lunch_{i}", label_visibility="collapsed")
 
         with col3:
-            st.selectbox(
-                "Cena",
-                recipe_options,
-                key=f"menu_dinner_{i}",
-                label_visibility="collapsed",
-            )
+            st.selectbox("Cena", recipe_options, key=f"menu_dinner_{i}", label_visibility="collapsed")
 
         st.divider()
 
     # Buttons for the last actions
-    end_col1, end_col2, _ = st.columns([1,1,4])
-    with end_col1:
-        st.button("Crear lista", width="stretch", type="primary")
-    with end_col2:
-        st.button("Guardar", width="stretch")
+    end_cols = st.columns([1,1,4])
+    with end_cols[0]:
+        button_create_shopping_list = st.button("Crear lista", width="stretch", type="primary")
+    with end_cols[1]:
+        button_save_weekly_menu = st.button("Guardar", width="stretch")
+
+   
         
 
 selected_page = render_sidebar()
