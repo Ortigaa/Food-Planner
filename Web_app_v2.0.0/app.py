@@ -6,7 +6,7 @@ Created on Mon Jun 08 11:51 2026
 @author: rodri
 
 Module Documentation:
-
+- Run with: uv run streamlit run app.py on the app folder
 
 TODO
 
@@ -70,6 +70,45 @@ def render_sidebar():
     st.sidebar.title("Menú")
     selected_page = st.sidebar.radio("Ir a", PAGES)
     return selected_page
+
+# =============================================================================
+# Other helpful functions
+# =============================================================================
+def collect_menu_entries(weekly_num_people, check_num_people):
+    menu_entries = []
+
+    for i, day in enumerate(DAYS):
+        lunch_recipe = st.session_state.get(f"menu_lunch_{i}", "")
+        dinner_recipe = st.session_state.get(f"menu_dinner_{i}", "")
+
+        lunch_people = (
+            weekly_num_people if check_num_people else st.session_state.get(f"menu_lunch_people_{i}", weekly_num_people)
+        )
+        dinner_people = (
+            weekly_num_people if check_num_people else st.session_state.get(f"menu_dinner_people_{i}", weekly_num_people)
+        )
+
+        if lunch_recipe:
+            menu_entries.append(
+                {
+                    "day": day,
+                    "meal_type": "comida",
+                    "recipe_name": lunch_recipe,
+                    "num_people": lunch_people,
+                }
+            )
+
+        if dinner_recipe:
+            menu_entries.append(
+                {
+                    "day": day,
+                    "meal_type": "cena",
+                    "recipe_name": dinner_recipe,
+                    "num_people": dinner_people,
+                }
+            )
+
+    return menu_entries
 
 # =============================================================================
 # Section for the different pages
@@ -255,16 +294,6 @@ def render_view_recipes():
 def render_create_menu():
     st.title("Crear Menú semanal")
 
-    # Mock temporal para probar la interfaz
-    recipe_options = [
-        "",
-        "Tortilla de patatas",
-        "Ensalada de tomate",
-        "Pasta con atún",
-        "Lentejas",
-        "Pollo al horno",
-    ]
-
     st.subheader("Plan semanal")
 
     # Buttons for menu actions
@@ -276,50 +305,149 @@ def render_create_menu():
     with control_cols[1]:
         button_clean = st.button("Limpiar", width="stretch")
 
-    selected_tags = st.multiselect("Tags", TAGS)
+    # Check if any tag has been selected
+    selected_tags = st.multiselect("Tags", TAGS, key="weekly_menu_tags")
+
+    # Get recipies from the database, filtered by tags if selected, and convert into a list
+    # Maybe this two lines can be packaged in a function to use it across pages
+    recipes = db.get_recipes_by_tags(selected_tags)
+    recipe_options = [""] + [recipe["name"] for recipe in recipes]
 
     # Functionality for the buttons
     if button_autofill:
-        for i in range(len(DAYS)):
-            st.session_state[f"menu_lunch_{i}"] = random.choice(recipe_options[1:])
-            st.session_state[f"menu_dinner_{i}"] = random.choice(recipe_options[1:])
-        st.rerun()
+        # Some fallback in case there is no recipes with selected tags
+        available_recipes = recipe_options[1:]
+        if not available_recipes:
+            st.warning("No hay recetas disponibles con los tags seleccionados.")
+        else:
+            for i in range(len(DAYS)):
+                st.session_state[f"menu_lunch_{i}"] = random.choice(available_recipes)
+                st.session_state[f"menu_dinner_{i}"] = random.choice(available_recipes)
+            st.rerun()
 
     if button_clean:
+        # Clean all the cells
         for i in range(len(DAYS)):
             st.session_state[f"menu_lunch_{i}"] = ""
+            st.session_state[f"menu_lunch_people_{i}"] = weekly_num_people
             st.session_state[f"menu_dinner_{i}"] = ""
+            st.session_state[f"menu_dinner_people_{i}"] = weekly_num_people
         st.rerun()
 
     # Number of people selection
     st.write("Numero de comensales")
-    select_col1, select_col2, _ = st.columns([1, 1, 4])
+    select_col1, select_col2, _ = st.columns([1, 3, 4])
     with select_col1:
-        num_people = st.number_input("Numero de comensales", min_value=1, value=4, step=1, label_visibility="collapsed")
+        weekly_num_people = st.number_input("Numero de comensales", min_value=1, value=4, step=1, key="weekly_num_people", label_visibility="collapsed")
     with select_col2:
-        check_num_people = st.checkbox("Global", value=True)
+        check_num_people = st.checkbox("Usar este valor para toda la semana", value=True, key="check_num_people")
 
-    header = st.columns([1, 2, 2])
-    with header[0]:
-        st.markdown("**Día**")
-    with header[1]:
-        st.markdown("**Comida**")
-    with header[2]:
-        st.markdown("**Cena**")
 
-    for i, day in enumerate(DAYS):
-        col1, col2, col3 = st.columns([1, 2, 2])
+    if check_num_people:
+        header = st.columns([0.1, 0.45, 0.45])
+        with header[0]:
+            st.markdown("**Día**")
+        with header[1]:
+            st.markdown("**Comida**")
+        with header[2]:
+            st.markdown("**Cena**")
 
-        with col1:
-            st.write(day)
+        for i, day in enumerate(DAYS):
+            col1, col2, col3 = st.columns([0.1, 0.45, 0.45])
 
-        with col2:
-            st.selectbox("Comida", recipe_options, key=f"menu_lunch_{i}", label_visibility="collapsed")
+            with col1:
+                st.write(day)
 
-        with col3:
-            st.selectbox("Cena", recipe_options, key=f"menu_dinner_{i}", label_visibility="collapsed")
+            with col2:
+                # First we check the current value of the cell
+                # if the cell has a value, and the tag selection is changed it might be deleted
+                # to avid this, the value is added to an internal list for this cell
+                current_lunch = st.session_state.get(f"menu_lunch_{i}", "")
+                lunch_options = recipe_options.copy()
+                if current_lunch and current_lunch not in lunch_options:
+                    lunch_options = [current_lunch] + lunch_options
 
-        st.divider()
+                st.selectbox("Comida", lunch_options, key=f"menu_lunch_{i}", label_visibility="collapsed")
+
+            with col3:
+                # Same problem and solution as above
+                current_dinner = st.session_state.get(f"menu_dinner_{i}", "")
+                dinner_options = recipe_options.copy()
+                if current_dinner and current_dinner not in dinner_options:
+                    dinner_options = [current_dinner] + dinner_options
+                st.selectbox("Cena", dinner_options, key=f"menu_dinner_{i}", label_visibility="collapsed")
+
+            st.divider()
+    else:
+        header = st.columns([0.1, 0.4, 0.05, 0.4, 0.05])
+        with header[0]:
+            st.markdown("**Día**")
+        with header[1]:
+            st.markdown("**Comida**")
+        with header[2]:
+            st.markdown("**#**")
+        with header[3]:
+            st.markdown("**Cena**")
+        with header[4]:
+            st.markdown("**#**")
+        
+        for i, day in enumerate(DAYS):
+            # Assign some values to session state for each slot in case the global check_num_people is not selected 
+            if f"menu_lunch_people_{i}" not in st.session_state:
+                st.session_state[f"menu_lunch_people_{i}"] = weekly_num_people
+            if f"menu_dinner_people_{i}" not in st.session_state:
+                st.session_state[f"menu_dinner_people_{i}"] = weekly_num_people
+
+            col1, col2, col3, col4, col5 = st.columns([0.1, 0.4, 0.05, 0.4, 0.05])
+
+            with col1:
+                st.write(day)
+
+            with col2:
+                current_lunch = st.session_state.get(f"menu_lunch_{i}", "")
+                lunch_options = recipe_options.copy()
+                if current_lunch and current_lunch not in lunch_options:
+                    lunch_options = [current_lunch] + lunch_options
+
+                st.selectbox(
+                    "Comida",
+                    lunch_options,
+                    key=f"menu_lunch_{i}",
+                    label_visibility="collapsed",
+                )
+
+            with col3:
+                st.number_input(
+                    "Personas comida",
+                    min_value=1,
+                    step=1,
+                    key=f"menu_lunch_people_{i}",
+                    label_visibility="collapsed",
+                )
+
+            with col4:
+                current_dinner = st.session_state.get(f"menu_dinner_{i}", "")
+                dinner_options = recipe_options.copy()
+                if current_dinner and current_dinner not in dinner_options:
+                    dinner_options = [current_dinner] + dinner_options
+
+                st.selectbox(
+                    "Cena",
+                    dinner_options,
+                    key=f"menu_dinner_{i}",
+                    label_visibility="collapsed",
+                )
+
+            with col5:
+                st.number_input(
+                    "Personas cena",
+                    min_value=1,
+                    step=1,
+                    key=f"menu_dinner_people_{i}",
+                    label_visibility="collapsed",
+                )
+
+            st.divider()
 
     # Buttons for the last actions
     end_cols = st.columns([1,1,4])
@@ -328,8 +456,27 @@ def render_create_menu():
     with end_cols[1]:
         button_save_weekly_menu = st.button("Guardar", width="stretch")
 
-   
+   # Functions for the buttons
+    if button_create_shopping_list:
+        menu_entries = collect_menu_entries(weekly_num_people, check_num_people)
+
+        if not menu_entries:
+            st.warning("El menú semanal está vacío.")
+        else:
+            shopping_list = db.build_shopping_list(menu_entries)
+
+            st.subheader("Lista de la compra")
+            for item in shopping_list:
+                qty = item["quantity"]
+                unit = item["unit"]
+
+                if qty is None:
+                    st.write(f"- {item['ingredient_name']}")
+                else:
+                    st.write(f"- {item['ingredient_name']}: {qty:.2f} {unit}")
         
+
+
 
 selected_page = render_sidebar()
 

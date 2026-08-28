@@ -131,6 +131,35 @@ def get_all_tags():
     conn.close()
     return [row["name"] for row in rows]
 
+def get_recipes_by_tags(selected_tags):
+    if not selected_tags:
+        return get_all_recipes()# If nothing is selected just run the regular get_all_recipies
+
+    placeholders = ",".join("?" * len(selected_tags))
+
+    conn = connect()
+    rows = conn.execute(
+        f"""
+        SELECT DISTINCT r.id, r.name, r.num_people, r.steps
+        FROM recipes r
+        JOIN recipe_tags rt ON r.id = rt.recipe_id
+        JOIN tags t ON t.id = rt.tag_id
+        WHERE t.name IN ({placeholders})
+        ORDER BY r.name ASC
+        """,
+        selected_tags,
+    ).fetchall()
+    conn.close()
+    return rows
+
+def get_recipe_by_name(recipe_name):
+    conn = connect()
+    row = conn.execute(
+        "SELECT id, name, num_people, steps FROM recipes WHERE name = ?",
+        (recipe_name,),
+    ).fetchone()
+    conn.close()
+    return row
 
 def search_recipes_by_name(search_text: str):
     search_text = search_text.strip()
@@ -155,6 +184,58 @@ def get_ingredients_by_recipe(recipe_id):
     rows = conn.execute("""SELECT ingredient_name, quantity, unit FROM ingredients WHERE recipe_id = ? ORDER BY ingredient_name ASC""",(recipe_id,),).fetchall()
     conn.close()
     return rows
+
+def get_ingredients_by_recipe_name(recipe_name):
+    conn = connect()
+    rows = conn.execute(
+        """
+        SELECT i.ingredient_name, i.quantity, i.unit
+        FROM ingredients i
+        JOIN recipes r ON r.id = i.recipe_id
+        WHERE r.name = ?
+        ORDER BY i.ingredient_name ASC
+        """,
+        (recipe_name,),
+    ).fetchall()
+    conn.close()
+    return rows
+
+def build_shopping_list(menu_entries):
+    shopping_map = {}
+
+    for entry in menu_entries:
+        recipe_name = entry["recipe_name"]
+        target_people = entry["num_people"]
+
+        recipe = get_recipe_by_name(recipe_name)
+        if recipe is None:
+            continue
+
+        base_people = recipe["num_people"] or 1
+        scale_factor = target_people / base_people
+
+        ingredients = get_ingredients_by_recipe_name(recipe_name)
+
+        for ingredient in ingredients:
+            ingredient_name = ingredient["ingredient_name"]
+            unit = ingredient["unit"] or ""
+            quantity = ingredient["quantity"]
+
+            key = (ingredient_name, unit)
+
+            if key not in shopping_map:
+                shopping_map[key] = {
+                    "ingredient_name": ingredient_name,
+                    "unit": unit,
+                    "quantity": 0 if quantity is not None else None,
+                }
+
+            if quantity is not None:
+                shopping_map[key]["quantity"] += quantity * scale_factor
+
+    shopping_list = list(shopping_map.values())
+    shopping_list.sort(key=lambda item: (item["ingredient_name"], item["unit"]))
+    return shopping_list
 
 if __name__ == "__main__":
     init_db()   
