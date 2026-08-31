@@ -16,12 +16,12 @@ TODO
 # Import additional modules, if fail, raise an error
 # =============================================================================
 try:
-    import os
     import random
     from datetime import datetime
     import streamlit as st
-    import sqlite3
     import db_backend as db
+    import json
+    from pathlib import Path
 
 except ModuleNotFoundError as imp_error:
     print("Import Error: {0}".format(imp_error))
@@ -55,6 +55,10 @@ PAGES = [
 DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
 TAGS = db.get_all_tags()
+
+LAST_MENU_SNAPSHOT_PATH = Path("last_weekly_menu.json")
+
+MENU_EXPORTS_DIR = Path("menu_exports")
 
 ### Session state definition
 if "ingredient_rows" not in st.session_state:
@@ -110,20 +114,100 @@ def collect_menu_entries(weekly_num_people, check_num_people):
 
     return menu_entries
 
+
+def build_weekly_menu_snapshot(weekly_num_people, check_num_people):
+    days = []
+
+    for i, day in enumerate(DAYS):
+        lunch_recipe = st.session_state.get(f"menu_lunch_{i}", "")
+        dinner_recipe = st.session_state.get(f"menu_dinner_{i}", "")
+
+        lunch_people = (
+            weekly_num_people
+            if check_num_people
+            else st.session_state.get(f"menu_lunch_people_{i}", weekly_num_people)
+        )
+        dinner_people = (
+            weekly_num_people
+            if check_num_people
+            else st.session_state.get(f"menu_dinner_people_{i}", weekly_num_people)
+        )
+
+        days.append(
+            {
+                "day": day,
+                "lunch": {
+                    "recipe_name": lunch_recipe,
+                    "num_people": lunch_people,
+                },
+                "dinner": {
+                    "recipe_name": dinner_recipe,
+                    "num_people": dinner_people,
+                },
+            }
+        )
+
+    return {
+        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "weekly_num_people": weekly_num_people,
+        "use_global_people": check_num_people,
+        "days": days,
+    }
+
+def save_last_weekly_menu_snapshot(snapshot):
+    LAST_MENU_SNAPSHOT_PATH.write_text(
+        json.dumps(snapshot, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+def save_weekly_menu_history(snapshot):
+    MENU_EXPORTS_DIR.mkdir(exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    export_path = MENU_EXPORTS_DIR / f"weekly_menu_{timestamp}.json"
+
+    export_path.write_text(
+        json.dumps(snapshot, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return export_path
+
+def persist_weekly_menu_snapshot(weekly_num_people, check_num_people):
+    snapshot = build_weekly_menu_snapshot(weekly_num_people, check_num_people)
+    save_last_weekly_menu_snapshot(snapshot)
+    history_path = save_weekly_menu_history(snapshot)
+    return snapshot, history_path
+
+def load_last_weekly_menu_snapshot():
+    if not LAST_MENU_SNAPSHOT_PATH.exists():
+        return None
+
+    return json.loads(LAST_MENU_SNAPSHOT_PATH.read_text(encoding="utf-8"))
+
+def list_weekly_menu_snapshots():
+    if not MENU_EXPORTS_DIR.exists():
+        return []
+
+    return sorted(
+        MENU_EXPORTS_DIR.glob("weekly_menu_*.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
 # =============================================================================
 # Section for the different pages
 # =============================================================================
 # Home page
 def render_home():
-    """
-    TODO
-    - Add persistance, so the last weekly menu is displayed at the home page
-    """
     st.title("Planificador familiar de recetas")
 
-    st.subheader("Semana actual")
+    snapshot = load_last_weekly_menu_snapshot()
 
-    header = st.columns([1, 2, 2])
+    if not snapshot:
+        st.info("Todavía no hay ningún menú semanal guardado.")
+        return
+
+    st.caption(f"Último menú guardado: {snapshot['saved_at']}")
+
+    header = st.columns([0.15, 0.425, 0.425])
     with header[0]:
         st.markdown("**Día**")
     with header[1]:
@@ -131,15 +215,26 @@ def render_home():
     with header[2]:
         st.markdown("**Cena**")
 
-    for day in DAYS:
-        col1, col2, col3 = st.columns([1, 2, 2])
+    for day_entry in snapshot["days"]:
+        col1, col2, col3 = st.columns([0.15, 0.425, 0.425])
+
+        lunch = day_entry["lunch"]
+        dinner = day_entry["dinner"]
+
+        lunch_text = "—"
+        dinner_text = "—"
+
+        if lunch["recipe_name"]:
+            lunch_text = f"{lunch['recipe_name']} ({lunch['num_people']} pers.)"
+        if dinner["recipe_name"]:
+            dinner_text = f"{dinner['recipe_name']} ({dinner['num_people']} pers.)"
 
         with col1:
-            st.write(day)
+            st.write(day_entry["day"])
         with col2:
-            st.write("—")
+            st.write(lunch_text)
         with col3:
-            st.write("—")
+            st.write(dinner_text)
 
         st.divider()
 
@@ -474,10 +569,21 @@ def render_create_menu():
                     st.write(f"- {item['ingredient_name']}")
                 else:
                     st.write(f"- {item['ingredient_name']}: {qty:.2f} {unit}")
-        
+
+        snapshot, history_path = persist_weekly_menu_snapshot(
+            weekly_num_people,
+            check_num_people,
+        )
+
+    if button_save_weekly_menu:
+        snapshot, history_path = persist_weekly_menu_snapshot(
+            weekly_num_people,
+            check_num_people,
+        )
+        st.success("Menú semanal guardado correctamente.")
 
 
-
+# Sidebar with the different pages
 selected_page = render_sidebar()
 
 if selected_page == "Inicio":
