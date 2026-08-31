@@ -55,9 +55,8 @@ PAGES = [
 DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
 TAGS = db.get_all_tags()
-
+# Variables to store previous menus
 LAST_MENU_SNAPSHOT_PATH = Path("last_weekly_menu.json")
-
 MENU_EXPORTS_DIR = Path("menu_exports")
 
 ### Session state definition
@@ -79,6 +78,20 @@ def render_sidebar():
 # Other helpful functions
 # =============================================================================
 def collect_menu_entries(weekly_num_people, check_num_people):
+    """
+    Save all the entries in the create menu page.
+    For use later in collecting ingredients.
+
+    Parameters
+    ---------
+    weekly_num_people: int
+        number of people eating
+    check_num_people:bool
+    
+    Returns
+    ---------
+    list
+    """
     menu_entries = []
 
     for i, day in enumerate(DAYS):
@@ -116,6 +129,19 @@ def collect_menu_entries(weekly_num_people, check_num_people):
 
 
 def build_weekly_menu_snapshot(weekly_num_people, check_num_people):
+    """
+    Save the currently viewed menu as a snapshot for displaying in the initial screen.
+
+    Parameters
+    ---------
+    weekly_num_people: int
+        number of people eating
+    check_num_people:bool
+
+    Returns
+    ---------
+    dictionary
+    """
     days = []
 
     for i, day in enumerate(DAYS):
