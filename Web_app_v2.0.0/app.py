@@ -9,7 +9,7 @@ Module Documentation:
 - Run with: uv run streamlit run app.py on the app folder
 
 TODO
-- Allow selection of historic menus in the home screen
+- Allow create shopping list from historic menus
 
 """
 
@@ -150,16 +150,7 @@ def build_weekly_menu_snapshot(weekly_num_people, check_num_people):
 
 def save_last_weekly_menu_snapshot(snapshot):
     """
-    Save a snapshot of the old menu.
-    In case you want to retrieve it a latter time.
-
-    Parameters
-    ---------
-    snapshot: a previous snapshot
-
-    Returns
-    ---------
-    none, saves a file
+    Overwrites the last weekly menu snapshot
     """
     LAST_MENU_SNAPSHOT_PATH.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2),encoding="utf-8")
 
@@ -192,6 +183,21 @@ def load_last_weekly_menu_snapshot():
 
     return json.loads(LAST_MENU_SNAPSHOT_PATH.read_text(encoding="utf-8"))
 
+def load_snapshot_history(snapshot_path):
+    """
+    Load all the snapshots that have been saved
+    """
+    return json.loads(Path(snapshot_path).read_text(encoding="utf-8"))
+
+def list_weekly_menu_snapshots():
+    """
+    Create a list of all the saved snapshot json files
+    """
+    if not MENU_EXPORTS_DIR.exists():
+        return []
+
+    return sorted(MENU_EXPORTS_DIR.glob("weekly_menu_*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+
 def list_weekly_menu_snapshots():
     """
     Creates a list of the saved json menus saved.
@@ -214,13 +220,36 @@ def render_home():
     """
     st.title("Planificador familiar de recetas")
 
-    snapshot = load_last_weekly_menu_snapshot()
+    last_snapshot = load_last_weekly_menu_snapshot()
+    history_paths = list_weekly_menu_snapshots()
 
-    if not snapshot:
+    if not last_snapshot and not history_paths:
         st.info("Todavía no hay ningún menú semanal guardado.")
         return
 
-    st.caption(f"Último menú guardado: {snapshot['saved_at']}")
+    snapshot_options = {"Último menú guardado": LAST_MENU_SNAPSHOT_PATH}
+
+    for path in history_paths:
+        label_timestamp = path.stem.replace("weekly_menu_", "").replace("_", " ")
+        snapshot_options[f"Histórico · {label_timestamp}"] = path
+
+    selected_label = st.selectbox(
+        "Mostrar menú",
+        options=list(snapshot_options.keys()),
+    )
+
+    selected_path = snapshot_options[selected_label]
+
+    if selected_path == LAST_MENU_SNAPSHOT_PATH:
+        snapshot = load_last_weekly_menu_snapshot()
+    else:
+        snapshot = load_snapshot_history(selected_path)
+
+    if not snapshot:
+        st.info("No se ha podido cargar el snapshot seleccionado.")
+        return
+
+    st.caption(f"Menú mostrado: {snapshot['saved_at']}")
 
     header = st.columns([0.15, 0.425, 0.425])
     with header[0]:
@@ -567,7 +596,8 @@ def render_create_menu():
                     st.write(f"- {item['ingredient_name']}")
                 else:
                     st.write(f"- {item['ingredient_name']}: {qty:.2f} {unit}")
-
+        
+        # The menu snapshot is also saved when the list is created
         snapshot, history_path = persist_weekly_menu_snapshot(weekly_num_people, check_num_people)
 
     if button_save_weekly_menu:
