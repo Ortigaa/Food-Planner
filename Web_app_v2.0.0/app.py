@@ -9,7 +9,7 @@ Module Documentation:
 - Run with: uv run streamlit run app.py on the app folder
 
 TODO
-- Allow create shopping list from historic menus
+- Allow create shopping list from historic menus (in create menu page)
 
 """
 
@@ -198,19 +198,6 @@ def list_weekly_menu_snapshots():
 
     return sorted(MENU_EXPORTS_DIR.glob("weekly_menu_*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
 
-def list_weekly_menu_snapshots():
-    """
-    Creates a list of the saved json menus saved.
-    """
-    if not MENU_EXPORTS_DIR.exists():
-        return []
-
-    return sorted(
-        MENU_EXPORTS_DIR.glob("weekly_menu_*.json"),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-
 def format_quantity(value):
     "Little helper to change the format of numbers"
     if value is None:
@@ -275,6 +262,28 @@ def format_shopping_list(shopping_list):
 
     return "\n".join(lines)
 
+def load_snapshot_into_menu_state(snapshot):
+    st.session_state["weekly_num_people"] = snapshot.get("weekly_num_people", 4)
+    st.session_state["weekly_use_global_people"] = snapshot.get("use_global_people", True)
+
+    snapshot_days = snapshot.get("days", [])
+
+    for i, day_entry in enumerate(snapshot_days):
+        lunch = day_entry.get("lunch", {})
+        dinner = day_entry.get("dinner", {})
+
+        st.session_state[f"menu_lunch_{i}"] = lunch.get("recipe_name", "") or ""
+        st.session_state[f"menu_dinner_{i}"] = dinner.get("recipe_name", "") or ""
+
+        st.session_state[f"menu_lunch_people_{i}"] = lunch.get(
+            "num_people",
+            st.session_state["weekly_num_people"],
+        )
+        st.session_state[f"menu_dinner_people_{i}"] = dinner.get(
+            "num_people",
+            st.session_state["weekly_num_people"],
+        )
+
 # =============================================================================
 # Section for the different pages
 # =============================================================================
@@ -291,20 +300,21 @@ def render_home():
     if not last_snapshot and not history_paths:
         st.info("Todavía no hay ningún menú semanal guardado.")
         return
-
+    # Create a dictionary with the selection options
+    # The last one created is the first to appear
     snapshot_options = {"Último menú guardado": LAST_MENU_SNAPSHOT_PATH}
-
+    # Then we add all the others
     for path in history_paths:
         label_timestamp = path.stem.replace("weekly_menu_", "").replace("_", " ")
         snapshot_options[f"Histórico · {label_timestamp}"] = path
-
+    # Show the list in the selecbox
     selected_label = st.selectbox(
         "Mostrar menú",
         options=list(snapshot_options.keys()),
     )
-
+    # Pick the option from the dictionary
     selected_path = snapshot_options[selected_label]
-
+    # And load it
     if selected_path == LAST_MENU_SNAPSHOT_PATH:
         snapshot = load_last_weekly_menu_snapshot()
     else:
@@ -316,6 +326,7 @@ def render_home():
 
     st.caption(f"Menú mostrado: {snapshot['saved_at']}")
 
+    ### UI
     header = st.columns([0.15, 0.425, 0.425])
     with header[0]:
         st.markdown("**Día**")
@@ -498,14 +509,31 @@ def render_create_menu():
 
     st.subheader("Plan semanal")
 
+    last_snapshot = load_last_weekly_menu_snapshot()
+    history_paths = list_weekly_menu_snapshots()
+
+    snapshot_options = {"Último menú guardado": LAST_MENU_SNAPSHOT_PATH}
+
+    for path in history_paths:
+        label_timestamp = path.stem.replace("weekly_menu_", "").replace("_", " ")
+        snapshot_options[f"Histórico · {label_timestamp}"] = path
+
+
     # Buttons for menu actions
-    control_cols = st.columns([1, 1, 4])
+    control_cols = st.columns([1, 1, 1, 4])
 
     with control_cols[0]:
         button_autofill = st.button("Autorrellenar", width="stretch")
 
     with control_cols[1]:
         button_clean = st.button("Limpiar", width="stretch")
+
+    with control_cols[2]:
+        button_load = st.button("Cargar", width="stretch")
+
+    with control_cols[3]:
+        select_menu = st.selectbox("Snapshots", options=list(snapshot_options.keys()), label_visibility="collapsed")
+        selected_snapshot = snapshot_options[select_menu]
 
     # Check if any tag has been selected
     selected_tags = st.multiselect("Tags", TAGS, key="weekly_menu_tags")
@@ -535,6 +563,19 @@ def render_create_menu():
             st.session_state[f"menu_dinner_{i}"] = ""
             st.session_state[f"menu_dinner_people_{i}"] = weekly_num_people
         st.rerun()
+
+    if button_load:
+        if selected_snapshot== LAST_MENU_SNAPSHOT_PATH:
+            snapshot = load_last_weekly_menu_snapshot()
+        else:
+            snapshot = load_snapshot_history(selected_snapshot)
+
+        if snapshot:
+            load_snapshot_into_menu_state(snapshot)
+            st.success("Snapshot cargado correctamente.")
+            st.rerun()
+        else:
+            st.warning("No se ha podido cargar el snapshot seleccionado.")
 
     # Number of people selection
     st.write("Numero de comensales")
