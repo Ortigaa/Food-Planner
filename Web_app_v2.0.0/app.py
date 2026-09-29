@@ -9,6 +9,7 @@ Module Documentation:
 - Run with: uv run streamlit run app.py on the app folder
 
 TODO
+- Allow selection of historic menus in the home screen
 
 """
 
@@ -86,11 +87,13 @@ def collect_menu_entries(weekly_num_people, check_num_people):
     ---------
     weekly_num_people: int
         number of people eating
-    check_num_people:bool
+    check_num_people: bool
+        if global paramters is set or not
     
     Returns
     ---------
-    list
+    menu entries: list
+        a list containing dicts with all the lunches and dinners names with the number of people
     """
     menu_entries = []
 
@@ -106,31 +109,17 @@ def collect_menu_entries(weekly_num_people, check_num_people):
         )
 
         if lunch_recipe:
-            menu_entries.append(
-                {
-                    "day": day,
-                    "meal_type": "comida",
-                    "recipe_name": lunch_recipe,
-                    "num_people": lunch_people,
-                }
-            )
+            menu_entries.append({"day": day, "meal_type": "comida", "recipe_name": lunch_recipe, "num_people": lunch_people})
 
         if dinner_recipe:
-            menu_entries.append(
-                {
-                    "day": day,
-                    "meal_type": "cena",
-                    "recipe_name": dinner_recipe,
-                    "num_people": dinner_people,
-                }
-            )
+            menu_entries.append({"day": day, "meal_type": "cena", "recipe_name": dinner_recipe, "num_people": dinner_people})
 
     return menu_entries
 
 
 def build_weekly_menu_snapshot(weekly_num_people, check_num_people):
     """
-    Save the currently viewed menu as a snapshot for displaying in the initial screen.
+    Create a snapshot of the current weekly menu.
 
     Parameters
     ---------
@@ -148,68 +137,65 @@ def build_weekly_menu_snapshot(weekly_num_people, check_num_people):
         lunch_recipe = st.session_state.get(f"menu_lunch_{i}", "")
         dinner_recipe = st.session_state.get(f"menu_dinner_{i}", "")
 
-        lunch_people = (
-            weekly_num_people
-            if check_num_people
-            else st.session_state.get(f"menu_lunch_people_{i}", weekly_num_people)
-        )
-        dinner_people = (
-            weekly_num_people
-            if check_num_people
-            else st.session_state.get(f"menu_dinner_people_{i}", weekly_num_people)
-        )
+        lunch_people = (weekly_num_people
+                        if check_num_people
+                        else st.session_state.get(f"menu_lunch_people_{i}", weekly_num_people))
+        dinner_people = (weekly_num_people
+                        if check_num_people
+                        else st.session_state.get(f"menu_dinner_people_{i}", weekly_num_people))
 
-        days.append(
-            {
-                "day": day,
-                "lunch": {
-                    "recipe_name": lunch_recipe,
-                    "num_people": lunch_people,
-                },
-                "dinner": {
-                    "recipe_name": dinner_recipe,
-                    "num_people": dinner_people,
-                },
-            }
-        )
+        days.append({"day": day,"lunch": {"recipe_name": lunch_recipe, "num_people": lunch_people}, "dinner": {"recipe_name": dinner_recipe,"num_people": dinner_people,}})
 
-    return {
-        "saved_at": datetime.now().isoformat(timespec="seconds"),
-        "weekly_num_people": weekly_num_people,
-        "use_global_people": check_num_people,
-        "days": days,
-    }
+    return {"saved_at": datetime.now().isoformat(timespec="seconds"),"weekly_num_people": weekly_num_people,"use_global_people": check_num_people,"days": days}
 
 def save_last_weekly_menu_snapshot(snapshot):
-    LAST_MENU_SNAPSHOT_PATH.write_text(
-        json.dumps(snapshot, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    """
+    Save a snapshot of the old menu.
+    In case you want to retrieve it a latter time.
+
+    Parameters
+    ---------
+    snapshot: a previous snapshot
+
+    Returns
+    ---------
+    none, saves a file
+    """
+    LAST_MENU_SNAPSHOT_PATH.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2),encoding="utf-8")
 
 def save_weekly_menu_history(snapshot):
+    """
+    Save a snapshot of the weekly menu as a timestamped json file
+    """
     MENU_EXPORTS_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     export_path = MENU_EXPORTS_DIR / f"weekly_menu_{timestamp}.json"
 
-    export_path.write_text(
-        json.dumps(snapshot, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    export_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2),encoding="utf-8")
     return export_path
 
 def persist_weekly_menu_snapshot(weekly_num_people, check_num_people):
+    """
+    Save a snapshot of the weekly menu as a timestamped json file
+    """
     snapshot = build_weekly_menu_snapshot(weekly_num_people, check_num_people)
     save_last_weekly_menu_snapshot(snapshot)
     history_path = save_weekly_menu_history(snapshot)
     return snapshot, history_path
 
 def load_last_weekly_menu_snapshot():
+    """
+    Load the last menu snapshot. Useful to show in the welcome page.
+    """
     if not LAST_MENU_SNAPSHOT_PATH.exists():
         return None
 
     return json.loads(LAST_MENU_SNAPSHOT_PATH.read_text(encoding="utf-8"))
 
 def list_weekly_menu_snapshots():
+    """
+    Creates a list of the saved json menus saved.
+    """
     if not MENU_EXPORTS_DIR.exists():
         return []
 
@@ -223,6 +209,9 @@ def list_weekly_menu_snapshots():
 # =============================================================================
 # Home page
 def render_home():
+    """
+    Home page, shows last menu saved.
+    """
     st.title("Planificador familiar de recetas")
 
     snapshot = load_last_weekly_menu_snapshot()
@@ -241,6 +230,7 @@ def render_home():
     with header[2]:
         st.markdown("**Cena**")
 
+    # Builds the calendar from the snapshot
     for day_entry in snapshot["days"]:
         col1, col2, col3 = st.columns([0.15, 0.425, 0.425])
 
@@ -267,14 +257,14 @@ def render_home():
 # Recipe creation page
 def render_create_recipe():
     """
-    
+    Page to create a new recipe.
     """
 
     UNITS = ["", "ud", "g", "kg", "ml", "l", "lata", "bote"]
 
     st.title("Crear receta")
 
-    # Control for the ingridients rows (add or remove)
+    # Control for the ingredients rows (add or remove)
     ing_rows_control = st.columns([1, 1, 1, 3])
     with ing_rows_control[0]:
         st.write("**Ingredientes**")
@@ -328,19 +318,13 @@ def render_create_recipe():
             raw_name = st.session_state.get(f"ingredient_name_{i}", "")
             qty = st.session_state.get(f"ingredient_qty_{i}", 0.0)
             unit = st.session_state.get(f"ingredient_unit_{i}", "")
-
+            # This is the first attempt to sanitize and normalize the input
             clean_name = raw_name.strip().lower()
             clean_unit = unit.strip().lower() if unit else None
             clean_qty = None if qty == 0 else qty
 
             if clean_name:
-                ingredients.append(
-                    {
-                        "name": clean_name,
-                        "quantity": clean_qty,
-                        "unit": clean_unit,
-                    }
-                )
+                ingredients.append({"name": clean_name,"quantity": clean_qty,"unit": clean_unit})
         # Convert the tags string into a list. Remove duplicates and normalize names
         tags = []
         for tag in tags_list:
@@ -361,11 +345,14 @@ def render_create_recipe():
 
 # View list of recipies already created
 def render_view_recipes():
+    """
+    Page to see the recipes that already exist
+    """
     st.title("Ver recetas")
     search_name = st.text_input("Buscar por nombre")
     selected_tags = st.multiselect("Filtrar por tags",options=TAGS)
     search_ingredient = st.text_input("Buscar por ingrediente")
-
+    # Call the database
     recipes = db.search_recipes_by_name(search_name)
 
     visible_recipes = []
@@ -378,10 +365,7 @@ def render_view_recipes():
 
         if search_ingredient:
             ingredient_text = search_ingredient.strip().lower()
-            matches_ingredient = any(
-                ingredient_text in ingredient["ingredient_name"].lower()
-                for ingredient in recipe_ingredients
-            )
+            matches_ingredient = any(ingredient_text in ingredient["ingredient_name"].lower() for ingredient in recipe_ingredients)
         else:
             matches_ingredient = True
 
@@ -413,6 +397,9 @@ def render_view_recipes():
 
 # Page to create a weekly menu
 def render_create_menu():
+    """
+    Page to select which recipies go into the weekly menu
+    """
     st.title("Crear Menú semanal")
 
     st.subheader("Plan semanal")
@@ -530,12 +517,7 @@ def render_create_menu():
                 if current_lunch and current_lunch not in lunch_options:
                     lunch_options = [current_lunch] + lunch_options
 
-                st.selectbox(
-                    "Comida",
-                    lunch_options,
-                    key=f"menu_lunch_{i}",
-                    label_visibility="collapsed",
-                )
+                st.selectbox("Comida", lunch_options, key=f"menu_lunch_{i}", label_visibility="collapsed")
 
             with col3:
                 st.number_input(
@@ -552,21 +534,10 @@ def render_create_menu():
                 if current_dinner and current_dinner not in dinner_options:
                     dinner_options = [current_dinner] + dinner_options
 
-                st.selectbox(
-                    "Cena",
-                    dinner_options,
-                    key=f"menu_dinner_{i}",
-                    label_visibility="collapsed",
-                )
+                st.selectbox("Cena", dinner_options, key=f"menu_dinner_{i}", label_visibility="collapsed")
 
             with col5:
-                st.number_input(
-                    "Personas cena",
-                    min_value=1,
-                    step=1,
-                    key=f"menu_dinner_people_{i}",
-                    label_visibility="collapsed",
-                )
+                st.number_input("Personas cena", min_value=1, step=1, key=f"menu_dinner_people_{i}", label_visibility="collapsed")
 
             st.divider()
 
@@ -579,6 +550,7 @@ def render_create_menu():
 
    # Functions for the buttons
     if button_create_shopping_list:
+        # This is the button that creates the shopping list
         menu_entries = collect_menu_entries(weekly_num_people, check_num_people)
 
         if not menu_entries:
@@ -596,16 +568,11 @@ def render_create_menu():
                 else:
                     st.write(f"- {item['ingredient_name']}: {qty:.2f} {unit}")
 
-        snapshot, history_path = persist_weekly_menu_snapshot(
-            weekly_num_people,
-            check_num_people,
-        )
+        snapshot, history_path = persist_weekly_menu_snapshot(weekly_num_people, check_num_people)
 
     if button_save_weekly_menu:
-        snapshot, history_path = persist_weekly_menu_snapshot(
-            weekly_num_people,
-            check_num_people,
-        )
+        # This is the button that saves the current menu as a snapshot
+        snapshot, history_path = persist_weekly_menu_snapshot(weekly_num_people, check_num_people)
         st.success("Menú semanal guardado correctamente.")
 
 
