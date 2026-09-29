@@ -210,6 +210,71 @@ def list_weekly_menu_snapshots():
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
+
+def format_quantity(value):
+    "Little helper to change the format of numbers"
+    if value is None:
+        return ""
+
+    value = float(value)
+    if value.is_integer():
+        return str(int(value))
+
+    return f"{value:.2f}"
+
+
+def format_menu(entries):
+    """
+    Changes the formating of the output menu so it is easier to copy/paste into a chat
+    """
+    lines = ["Menú semanal", ""]
+
+    grouped = {}
+    for entry in entries:
+        day = entry["day"]
+        grouped.setdefault(day, {"comida": None, "cena": None})
+        grouped[day][entry["meal_type"]] = entry
+
+    for day in DAYS:
+        lunch = grouped.get(day, {}).get("comida")
+        dinner = grouped.get(day, {}).get("cena")
+
+        lunch_text = "—"
+        dinner_text = "—"
+
+        if lunch and lunch["recipe_name"]:
+            lunch_text = f"{lunch['recipe_name']} ({lunch['num_people']} pers.)"
+
+        if dinner and dinner["recipe_name"]:
+            dinner_text = f"{dinner['recipe_name']} ({dinner['num_people']} pers.)"
+
+        lines.append(f"{day}")
+        lines.append(f"- Comida: {lunch_text}")
+        lines.append(f"- Cena: {dinner_text}")
+        lines.append("")
+
+    return "\n".join(lines).strip()
+
+def format_shopping_list(shopping_list):
+    """
+    Changes the formatting of the output shopping list so it is easier to copy/paste into a chat
+    """
+    lines = ["Lista de la compra", ""]
+
+    for item in shopping_list:
+        qty = item.get("quantity")
+        unit = item.get("unit") or ""
+        name = item["ingredient_name"]
+
+        if qty is None:
+            lines.append(f"- {name}")
+        else:
+            qty_text = format_quantity(qty)
+            suffix = f" {unit}" if unit else ""
+            lines.append(f"- {name}: {qty_text}{suffix}")
+
+    return "\n".join(lines)
+
 # =============================================================================
 # Section for the different pages
 # =============================================================================
@@ -586,16 +651,12 @@ def render_create_menu():
             st.warning("El menú semanal está vacío.")
         else:
             shopping_list = db.build_shopping_list(menu_entries)
-
-            st.subheader("Lista de la compra")
-            for item in shopping_list:
-                qty = item["quantity"]
-                unit = item["unit"]
-
-                if qty is None:
-                    st.write(f"- {item['ingredient_name']}")
-                else:
-                    st.write(f"- {item['ingredient_name']}: {qty:.2f} {unit}")
+            # Create the text for exporting to a chat
+            menu_text = format_menu(menu_entries)
+            shopping_text = format_shopping_list(shopping_list)
+            combined_text = f"{menu_text}\n\n{shopping_text}"
+            # Show the text
+            st.text_area("Texto para copiar", value=combined_text, height=420)
         
         # The menu snapshot is also saved when the list is created
         snapshot, history_path = persist_weekly_menu_snapshot(weekly_num_people, check_num_people)
