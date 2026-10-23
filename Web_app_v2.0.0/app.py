@@ -18,11 +18,9 @@ TODO
 # =============================================================================
 try:
     import random
-    from datetime import datetime
     import streamlit as st
     import db_backend as db
     import functions as functions
-    import json
     from pathlib import Path
 
 except ModuleNotFoundError as imp_error:
@@ -37,6 +35,7 @@ def init_app():
     ### Page configuration
     st.set_page_config(page_title="Planificador Menus semanales",page_icon="app_icon.png",layout="wide")
     st.logo("app_icon.png", size="medium", link=None, icon_image=None)
+
     ### Session state definition
     if "ingredient_rows" not in st.session_state:
         st.session_state.ingredient_rows = 3
@@ -45,6 +44,11 @@ def init_app():
             st.session_state[f"menu_lunch_{i}"] = ""
         if f"menu_dinner_{i}" not in st.session_state:
             st.session_state[f"menu_dinner_{i}"] = ""
+
+    if "editing_recipe_id" not in st.session_state:
+        st.session_state["editing_recipe_id"] = None
+    if "edit_ingredient_rows" not in st.session_state:
+        st.session_state["edit_ingredient_rows"] = {}
 
 
 # Global variables for use across pages
@@ -72,7 +76,145 @@ def render_sidebar():
 # =============================================================================
 # Other helpful functions
 # =============================================================================
+def render_edit_recipe_form(recipe_id):
+    UNITS = ["", "ud", "g", "kg", "ml", "l", "lata"]
 
+    st.markdown("### Editar receta")
+
+    rows = st.session_state["edit_ingredient_rows"].get(recipe_id, 1)
+
+    control_cols = st.columns([1, 1, 4])
+    with control_cols[0]:
+        if st.button("Añadir fila", key=f"edit_add_row_{recipe_id}", use_container_width=True):
+            st.session_state["edit_ingredient_rows"][recipe_id] = rows + 1
+            st.rerun()
+
+    with control_cols[1]:
+        if st.button(
+            "Quitar fila",
+            key=f"edit_remove_row_{recipe_id}",
+            use_container_width=True,
+            disabled=rows <= 1,
+        ):
+            st.session_state["edit_ingredient_rows"][recipe_id] = rows - 1
+            st.rerun()
+
+    with st.form(f"edit_recipe_form_{recipe_id}"):
+        st.subheader("Nombre")
+        recipe_name = st.text_input(
+            "Nombre",
+            key=f"edit_name_{recipe_id}",
+            label_visibility="collapsed",
+        )
+
+        st.subheader("Ingredientes")
+        num_people = st.number_input(
+            "Número de personas",
+            min_value=1,
+            step=1,
+            key=f"edit_num_people_{recipe_id}",
+        )
+
+        header_cols = st.columns([0.8, 0.1, 0.1])
+        header_cols[0].markdown("**Ingrediente**")
+        header_cols[1].markdown("**Cantidad**")
+        header_cols[2].markdown("**Unidad**")
+
+        for i in range(rows):
+            col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
+
+            with col1:
+                st.text_input(
+                    "Ingrediente",
+                    key=f"edit_ingredient_name_{recipe_id}_{i}",
+                    label_visibility="collapsed",
+                    placeholder="Tomate",
+                )
+
+            with col2:
+                st.number_input(
+                    "Cantidad",
+                    min_value=0.0,
+                    step=0.5,
+                    key=f"edit_ingredient_qty_{recipe_id}_{i}",
+                    label_visibility="collapsed",
+                )
+
+            with col3:
+                st.selectbox(
+                    "Unidad",
+                    UNITS,
+                    key=f"edit_ingredient_unit_{recipe_id}_{i}",
+                    label_visibility="collapsed",
+                )
+
+        st.subheader("Preparación")
+        steps = st.text_area(
+            "Pasos",
+            key=f"edit_steps_{recipe_id}",
+            label_visibility="collapsed",
+            height=180,
+        )
+
+        st.subheader("Clasificación")
+        tags_text = st.text_input(
+            "Tags",
+            key=f"edit_tags_{recipe_id}",
+            label_visibility="collapsed",
+        )
+
+        save_col, cancel_col = st.columns(2)
+        with save_col:
+            submitted = st.form_submit_button("Guardar cambios")
+        with cancel_col:
+            cancelled = st.form_submit_button("Cancelar")
+
+    if cancelled:
+        st.session_state["editing_recipe_id"] = None
+        st.rerun()
+
+    if submitted:
+        ingredients = []
+
+        for i in range(rows):
+            raw_name = st.session_state.get(f"edit_ingredient_name_{recipe_id}_{i}", "")
+            qty = st.session_state.get(f"edit_ingredient_qty_{recipe_id}_{i}", 0.0)
+            unit = st.session_state.get(f"edit_ingredient_unit_{recipe_id}_{i}", "")
+
+            clean_name = raw_name.strip().lower()
+            clean_unit = unit.strip().lower() if unit else None
+            clean_qty = None if qty == 0 else qty
+
+            if clean_name:
+                ingredients.append(
+                    {
+                        "name": clean_name,
+                        "quantity": clean_qty,
+                        "unit": clean_unit,
+                    }
+                )
+
+        tags = []
+        for tag in tags_text.split(","):
+            clean_tag = tag.strip().lower()
+            if clean_tag and clean_tag not in tags:
+                tags.append(clean_tag)
+
+        try:
+            db.update_recipe(
+                recipe_id=recipe_id,
+                name=recipe_name,
+                num_people=num_people,
+                ingredients=ingredients,
+                steps=steps,
+                tags=tags,
+            )
+            st.session_state["editing_recipe_id"] = None
+            st.success("Receta actualizada correctamente.")
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"No se pudo actualizar la receta: {e}")
 
 # =============================================================================
 # Section for the different pages
@@ -272,23 +414,68 @@ def render_view_recipes():
         return
 
     for recipe, recipe_tags, recipe_ingredients in visible_recipes:
-        element = st.expander(f"{recipe['name']}")
-        element.write(f"Raciones base: {recipe['num_people']}")
-        element.write(f"Tags: {', '.join(recipe_tags) if recipe_tags else 'Sin tags'}")
+        with st.expander(f"{recipe['name']}"):
+            st.write(f"Raciones base: {recipe['num_people']}")
+            st.write(f"Tags: {', '.join(recipe_tags) if recipe_tags else 'Sin tags'}")
 
-        element.write("**Ingredientes:**")
-        for ingredient in recipe_ingredients:
-            qty = ingredient["quantity"]
-            unit = ingredient["unit"] or ""
+            st.write("**Ingredientes:**")
+            for ingredient in recipe_ingredients:
+                qty = ingredient["quantity"]
+                unit = ingredient["unit"] or ""
 
-            if qty is None:
-                element.write(f"- {ingredient['ingredient_name']}")
-            else:
-                element.write(f"- {ingredient['ingredient_name']}: {qty} {unit}")
+                if qty is None:
+                    st.write(f"- {ingredient['ingredient_name']}")
+                else:
+                    st.write(f"- {ingredient['ingredient_name']}: {qty} {unit}")
 
-        element.write("**Pasos:**")
-        element.write(recipe["steps"])
-        element.divider()
+            st.write("**Pasos:**")
+            st.write(recipe["steps"])
+
+            st.space("medium")
+            col_edit, col_delete,= st.columns([0.1, 0.9])
+
+            with col_edit:
+                if st.button("Editar", key=f"edit_recipe_{recipe['id']}"):
+                    full_recipe = db.get_recipe_by_id(recipe["id"])
+                    st.session_state["editing_recipe_id"] = recipe["id"]
+                    st.session_state["edit_ingredient_rows"][recipe["id"]] = max(1, len(full_recipe["ingredients"]))
+
+                    st.session_state[f"edit_name_{recipe['id']}"] = full_recipe["name"]
+                    st.session_state[f"edit_num_people_{recipe['id']}"] = full_recipe["num_people"]
+                    st.session_state[f"edit_steps_{recipe['id']}"] = full_recipe["steps"]
+                    st.session_state[f"edit_tags_{recipe['id']}"] = ", ".join(full_recipe["tags"])
+
+                    for i, ingredient in enumerate(full_recipe["ingredients"]):
+                        st.session_state[f"edit_ingredient_name_{recipe['id']}_{i}"] = ingredient["name"]
+                        st.session_state[f"edit_ingredient_qty_{recipe['id']}_{i}"] = ingredient["quantity"] or 0.0
+                        st.session_state[f"edit_ingredient_unit_{recipe['id']}_{i}"] = ingredient["unit"] or ""
+
+                    st.rerun()
+                        
+            with col_delete:
+                # Add a button to delete the recipe
+                if st.button("Eliminar", key=f"delete_recipe_{recipe['id']}"):
+                    st.session_state["recipe_pending_delete"] = recipe["id"]
+
+                if st.session_state.get("recipe_pending_delete") == recipe["id"]:
+                    st.warning("¿Seguro que quieres borrar esta receta?")
+
+                    col_confirm, col_cancel, null= st.columns([0.1, 0.1, 0.8])
+
+                    with col_confirm:
+                        if st.button("Sí, borrar", key=f"confirm_delete_{recipe['id']}"):
+                            db.delete_recipe(recipe["id"])
+                            st.session_state["recipe_pending_delete"] = None
+                            st.success("Receta eliminada.")
+                            st.rerun()
+
+                    with col_cancel:
+                        if st.button("Cancelar", key=f"cancel_delete_{recipe['id']}"):
+                            st.session_state["recipe_pending_delete"] = None
+                            st.rerun()
+
+            if st.session_state.get("editing_recipe_id") == recipe["id"]:
+                render_edit_recipe_form(recipe["id"])
 
 # Page to create a weekly menu
 def render_create_menu():

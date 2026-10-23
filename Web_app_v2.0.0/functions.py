@@ -18,7 +18,6 @@ TODO
 try:
     from datetime import datetime
     import streamlit as st
-    import db_backend as db
     import app as app
     import json
     from pathlib import Path

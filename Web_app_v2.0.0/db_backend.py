@@ -16,7 +16,6 @@ TODO
 # Import additional modules, if fail, raise an error
 # =============================================================================
 try:
-    import os
     import sqlite3
 
 except ModuleNotFoundError as imp_error:
@@ -118,6 +117,11 @@ def add_recipe(name, num_people, ingredients, steps, tags):
     conn.commit()
     conn.close()
 
+def delete_recipe(recipe_id):
+    conn = connect()
+    conn.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,))
+    conn.commit()
+    conn.close()
 
 def get_all_recipes():
     conn = connect()
@@ -130,6 +134,61 @@ def get_all_tags():
     rows = conn.execute("SELECT name FROM tags ORDER BY name ASC").fetchall()
     conn.close()
     return [row["name"] for row in rows]
+
+def get_recipe_by_id(recipe_id):
+    conn = connect()
+
+    recipe_row = conn.execute(
+        """
+        SELECT id, name, num_people, steps
+        FROM recipes
+        WHERE id = ?
+        """,
+        (recipe_id,),
+    ).fetchone()
+
+    if recipe_row is None:
+        conn.close()
+        return None
+
+    ingredient_rows = conn.execute(
+        """
+        SELECT ingredient_name, quantity, unit
+        FROM ingredients
+        WHERE recipe_id = ?
+        ORDER BY id ASC
+        """,
+        (recipe_id,),
+    ).fetchall()
+
+    tag_rows = conn.execute(
+        """
+        SELECT t.name
+        FROM tags t
+        JOIN recipe_tags rt ON t.id = rt.tag_id
+        WHERE rt.recipe_id = ?
+        ORDER BY t.name ASC
+        """,
+        (recipe_id,),
+    ).fetchall()
+
+    conn.close()
+
+    return {
+        "id": recipe_row["id"],
+        "name": recipe_row["name"],
+        "num_people": recipe_row["num_people"],
+        "steps": recipe_row["steps"],
+        "ingredients": [
+            {
+                "name": row["ingredient_name"],
+                "quantity": row["quantity"],
+                "unit": row["unit"],
+            }
+            for row in ingredient_rows
+        ],
+        "tags": [row["name"] for row in tag_rows],
+    }
 
 def get_recipes_by_tags(selected_tags):
     if not selected_tags:
@@ -160,6 +219,52 @@ def get_recipe_by_name(recipe_name):
     ).fetchone()
     conn.close()
     return row
+
+def update_recipe(recipe_id, name, num_people, ingredients, steps, tags):
+    conn = connect()
+
+    conn.execute(
+        """
+        UPDATE recipes
+        SET name = ?, num_people = ?, steps = ?
+        WHERE id = ?
+        """,
+        (name.strip(), num_people, steps.strip(), recipe_id),
+    )
+
+    conn.execute("DELETE FROM ingredients WHERE recipe_id = ?", (recipe_id,))
+    for ingredient in ingredients:
+        conn.execute(
+            """
+            INSERT INTO ingredients (recipe_id, ingredient_name, quantity, unit)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                recipe_id,
+                ingredient["name"],
+                ingredient["quantity"],
+                ingredient["unit"],
+            ),
+        )
+
+    conn.execute("DELETE FROM recipe_tags WHERE recipe_id = ?", (recipe_id,))
+    for tag in tags:
+        conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
+        tag_row = conn.execute(
+            "SELECT id FROM tags WHERE name = ?",
+            (tag,),
+        ).fetchone()
+
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO recipe_tags (recipe_id, tag_id)
+            VALUES (?, ?)
+            """,
+            (recipe_id, tag_row["id"]),
+        )
+
+    conn.commit()
+    conn.close()
 
 def search_recipes_by_name(search_text: str):
     search_text = search_text.strip()
