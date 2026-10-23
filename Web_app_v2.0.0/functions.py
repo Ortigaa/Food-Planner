@@ -18,7 +18,7 @@ TODO
 try:
     from datetime import datetime
     import streamlit as st
-    import app as app
+    import config as config
     import json
     from pathlib import Path
 
@@ -48,7 +48,7 @@ def collect_menu_entries(weekly_num_people, bool_num_people):
     """
     menu_entries = []
 
-    for i, day in enumerate(app.DAYS):
+    for i, day in enumerate(config.DAYS):
         lunch_recipe = st.session_state.get(f"menu_lunch_{i}", "")
         dinner_recipe = st.session_state.get(f"menu_dinner_{i}", "")
 
@@ -86,7 +86,7 @@ def build_menu_snapshot(weekly_num_people, bool_num_people):
     """
     days = []
 
-    for i, day in enumerate(app.DAYS):
+    for i, day in enumerate(config.DAYS):
         lunch_recipe = st.session_state.get(f"menu_lunch_{i}", "")
         dinner_recipe = st.session_state.get(f"menu_dinner_{i}", "")
 
@@ -104,16 +104,16 @@ def save_last_menu_snapshot(snapshot):
     """
     Overwrites the last weekly menu snapshot
     """
-    app.LAST_MENU_SNAPSHOT_PATH.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2),encoding="utf-8")
+    config.LAST_MENU_SNAPSHOT_PATH.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2),encoding="utf-8")
 
 
 def save_menu_snapshot(snapshot):
     """
     Save a snapshot of the weekly menu as a timestamped json file
     """
-    app.MENU_EXPORTS_DIR.mkdir(exist_ok=True)
+    config.MENU_EXPORTS_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    export_path = app.MENU_EXPORTS_DIR / f"weekly_menu_{timestamp}.json"
+    export_path = config.MENU_EXPORTS_DIR / f"weekly_menu_{timestamp}.json"
 
     export_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2),encoding="utf-8")
     return export_path
@@ -142,10 +142,10 @@ def load_last_menu_snapshot():
     """
     Load the last menu snapshot. Useful to show in the welcome page.
     """
-    if not app.LAST_MENU_SNAPSHOT_PATH.exists():
+    if not config.LAST_MENU_SNAPSHOT_PATH.exists():
         return None
 
-    return json.loads(app.LAST_MENU_SNAPSHOT_PATH.read_text(encoding="utf-8"))
+    return json.loads(config.LAST_MENU_SNAPSHOT_PATH.read_text(encoding="utf-8"))
 
 
 def load_snapshot(snapshot_path):
@@ -162,10 +162,10 @@ def list_menu_snapshots():
     ---------
     list
     """
-    if not app.MENU_EXPORTS_DIR.exists():
+    if not config.MENU_EXPORTS_DIR.exists():
         return []
 
-    return sorted(app.MENU_EXPORTS_DIR.glob("weekly_menu_*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    return sorted(config.MENU_EXPORTS_DIR.glob("weekly_menu_*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
 
 def format_quantity(value):
     "Little helper to change the format of numbers"
@@ -191,7 +191,7 @@ def format_menu(entries):
         grouped.setdefault(day, {"comida": None, "cena": None})
         grouped[day][entry["meal_type"]] = entry
 
-    for day in app.DAYS:
+    for day in config.DAYS:
         lunch = grouped.get(day, {}).get("comida")
         dinner = grouped.get(day, {}).get("cena")
 
@@ -238,7 +238,7 @@ def load_snapshot_into_menu_state(snapshot):
     Useful to make small changes to a previous menu.
     """
     st.session_state["weekly_num_people"] = snapshot.get("weekly_num_people", 4)
-    st.session_state["weekly_use_global_people"] = snapshot.get("use_global_people", True)
+    st.session_state["bool_num_people"] = snapshot.get("use_global_people", True)
 
     snapshot_days = snapshot.get("days", [])
 

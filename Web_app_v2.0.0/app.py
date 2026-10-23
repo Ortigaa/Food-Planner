@@ -9,7 +9,12 @@ Module Documentation:
 - Run with: uv run streamlit run app.py on the app folder
 
 TODO
-- Allow create shopping list from historic menus (in create menu page): right now the number of people is not updating from the historic
+- Fix number of people while loading previous snapshots
+- Make snapshot more robust by saving recipe_id in case recipe is rename
+- More input validation in create recipes
+- Some code is reused in render_home and render_create_menu, make a function for both cases
+- Split render_create_menu into some functions, now is too big and unweldy
+- Better session_state initialization
 
 """
 
@@ -22,6 +27,7 @@ try:
     import db_backend as db
     import functions as functions
     from pathlib import Path
+    import config as config
 
 except ModuleNotFoundError as imp_error:
     print("Import Error: {0}".format(imp_error))
@@ -39,7 +45,7 @@ def init_app():
     ### Session state definition
     if "ingredient_rows" not in st.session_state:
         st.session_state.ingredient_rows = 3
-    for i in range(len(DAYS)):
+    for i in range(len(config.DAYS)):
         if f"menu_lunch_{i}" not in st.session_state:
             st.session_state[f"menu_lunch_{i}"] = ""
         if f"menu_dinner_{i}" not in st.session_state:
@@ -51,26 +57,10 @@ def init_app():
         st.session_state["edit_ingredient_rows"] = {}
 
 
-# Global variables for use across pages
-### List of pages for the sidebar
-# At some point maybe is better to change it to actual pages (different scripts for each page)
-PAGES = [
-    "Inicio",
-    "Crear receta",
-    "Ver recetas",
-    "Crear Menú semanal"
-]
-
-DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-
-# Variables to store previous menus
-LAST_MENU_SNAPSHOT_PATH = Path("last_weekly_menu.json")
-MENU_EXPORTS_DIR = Path("menu_exports")
-
 ### Creation of sidebar
 def render_sidebar():
     st.sidebar.title("Menú")
-    selected_page = st.sidebar.radio("Ir a", PAGES)
+    selected_page = st.sidebar.radio("Ir a", config.PAGES)
     return selected_page
 
 # =============================================================================
@@ -237,7 +227,7 @@ def render_home():
     
     # Create a dictionary with the selection options
     # The last one created is the first to appear
-    snapshot_options = {"Último menú guardado": LAST_MENU_SNAPSHOT_PATH}
+    snapshot_options = {"Último menú guardado": config.LAST_MENU_SNAPSHOT_PATH}
     # Then we add all the others
     for path in historic_snapshot_list:
         label_timestamp = path.stem.replace("weekly_menu_", "").replace("_", " ")
@@ -247,7 +237,7 @@ def render_home():
     # Pick the option from the dictionary
     selected_path = snapshot_options[selected_label]
     # And load it
-    if selected_path == LAST_MENU_SNAPSHOT_PATH:
+    if selected_path == config.LAST_MENU_SNAPSHOT_PATH:
         snapshot = functions.load_last_menu_snapshot()
     else:
         snapshot = functions.load_snapshot(selected_path)
@@ -376,7 +366,7 @@ def render_create_recipe():
         #st.write("**Pasos:**", steps)
         #st.write("**Tags:**", tags)
         #st.write("**Ingredientes:**")
-        st.json(ingredients)
+        #st.json(ingredients)
         db.add_recipe(recipe_name, num_people, ingredients, steps, tags)
         st.success("Receta guardada correctamente.")
 
@@ -491,7 +481,7 @@ def render_create_menu():
     last_snapshot = functions.load_last_menu_snapshot()
     history_paths = functions.list_menu_snapshots()
 
-    snapshot_options = {"Último menú guardado": LAST_MENU_SNAPSHOT_PATH}
+    snapshot_options = {"Último menú guardado": config.LAST_MENU_SNAPSHOT_PATH}
 
     for path in history_paths:
         label_timestamp = path.stem.replace("weekly_menu_", "").replace("_", " ")
@@ -529,22 +519,13 @@ def render_create_menu():
         if not available_recipes:
             st.warning("No hay recetas disponibles con los tags seleccionados.")
         else:
-            for i in range(len(DAYS)):
+            for i in range(len(config.DAYS)):
                 st.session_state[f"menu_lunch_{i}"] = random.choice(available_recipes)
                 st.session_state[f"menu_dinner_{i}"] = random.choice(available_recipes)
             st.rerun()
 
-    if button_clean:
-        # Clean all the cells
-        for i in range(len(DAYS)):
-            st.session_state[f"menu_lunch_{i}"] = ""
-            st.session_state[f"menu_lunch_people_{i}"] = weekly_num_people
-            st.session_state[f"menu_dinner_{i}"] = ""
-            st.session_state[f"menu_dinner_people_{i}"] = weekly_num_people
-        st.rerun()
-
     if button_load:
-        if selected_snapshot== LAST_MENU_SNAPSHOT_PATH:
+        if selected_snapshot== config.LAST_MENU_SNAPSHOT_PATH:
             snapshot = functions.load_last_menu_snapshot()
         else:
             snapshot = functions.load_snapshot(selected_snapshot)
@@ -562,7 +543,7 @@ def render_create_menu():
     with select_col1:
         weekly_num_people = st.number_input("Numero de comensales", min_value=1, value=4, step=1, key="weekly_num_people", label_visibility="collapsed")
     with select_col2:
-        check_num_people = st.checkbox("Usar este valor para toda la semana", value=True, key="check_num_people")
+        check_num_people = st.checkbox("Usar este valor para toda la semana", value=True, key="bool_num_people")
 
 
     if check_num_people:
@@ -574,7 +555,7 @@ def render_create_menu():
         with header[2]:
             st.markdown("**Cena**")
 
-        for i, day in enumerate(DAYS):
+        for i, day in enumerate(config.DAYS):
             col1, col2, col3 = st.columns([0.1, 0.45, 0.45])
 
             with col1:
@@ -613,7 +594,7 @@ def render_create_menu():
         with header[4]:
             st.markdown("**#**")
         
-        for i, day in enumerate(DAYS):
+        for i, day in enumerate(config.DAYS):
             # Assign some values to session state for each slot in case the global check_num_people is not selected 
             if f"menu_lunch_people_{i}" not in st.session_state:
                 st.session_state[f"menu_lunch_people_{i}"] = weekly_num_people
@@ -654,6 +635,15 @@ def render_create_menu():
                 st.number_input("Personas cena", min_value=1, step=1, key=f"menu_dinner_people_{i}", label_visibility="collapsed")
 
             st.divider()
+
+    if button_clean:
+            # Clean all the cells
+            for i in range(len(config.DAYS)):
+                st.session_state[f"menu_lunch_{i}"] = ""
+                st.session_state[f"menu_lunch_people_{i}"] = weekly_num_people
+                st.session_state[f"menu_dinner_{i}"] = ""
+                st.session_state[f"menu_dinner_people_{i}"] = weekly_num_people
+            st.rerun()
 
     # Buttons for the last actions
     end_cols = st.columns([1,1,4])
